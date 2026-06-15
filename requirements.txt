@@ -1,0 +1,7 @@
+openai>=1.50
+sympy>=1.12
+math-verify
+pandas
+pyarrow
+pytest
+pytest-asyncio

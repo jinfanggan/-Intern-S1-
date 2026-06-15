@@ -1,0 +1,28 @@
+# ===== 密钥 / 凭证（绝不入库）=====
+.env
+.env.*
+*.key
+*_rsa
+*_ed25519
+
+# ===== 运行产物 / 缓存（体积大、可复现，不入库）=====
+runs/
+*.log
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# ===== 第三方代码 / 数据集（各自独立获取，不进本仓库）=====
+reference/
+datasets/
+
+# ===== 编辑器 =====
+.vscode/
+.idea/
+.DS_Store
