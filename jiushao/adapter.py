@@ -92,7 +92,8 @@ async def solve_with_forking_adapter(client, problem: str, *, n_chains: int = 3,
     r = await solve_with_forking(llm, problem, n_chains=n_chains,
                                  max_rounds=max_rounds, temperature=temperature,
                                  emit=emit)
-    final = r.get("transcript") or (r.get("answer") or "")
+    # 纯答案优先，提取失败退回完整解答；推理在 trace
+    final = r.get("answer") or r.get("transcript") or ""
     return {"final_response": final, "trace": _events_to_trace(events)}
 
 
@@ -105,8 +106,9 @@ async def solve_problem(client, problem: str, *, n_chains: int = 3,
     我们用程序构造的数值裁判过滤候选（强、接地）。裁判不适用的题
     （符号/证明）自动退回纯投票，零副作用。
 
-    返回 {final_response, trace}，final_response 为选中簇的完整解答
-    （含 \\boxed{} 终答，交官方 judger 提取判分）。
+    返回 {final_response, trace}。final_response 为投票选出的【纯答案】
+    （干净的最终答案，符合官方自检"不是完整调试日志"的要求）；
+    完整推理过程在 trace 中（决赛/同分时参考）。
     """
     llm = OfficialClientLLM(client, default_temperature=temperature)
     events: list[dict] = []
@@ -144,13 +146,14 @@ async def solve_problem(client, problem: str, *, n_chains: int = 3,
             else:
                 emit("oracle", "all_pass", total=len(ok))
 
-    # 等价归一投票，选最大簇；final_response 用该簇代表链的完整解答
+    # 等价归一投票，选最大簇
     agg = cluster_and_vote([c["answer"] for c in pool])
     emit("aggregate", "vote", clusters=agg["clusters"], final=agg["final"])
 
-    final_chain = next(
-        (c for c in pool if c["answer"] == agg["final"]), pool[0])
-    final_response = final_chain.get("transcript") or (agg["final"] or "")
+    # final_response = 纯答案（judger 比对标准答案最直接）；
+    # 提取失败才退回完整解答兜底。完整推理在 trace（chain_round 事件）。
+    final_chain = next((c for c in pool if c["answer"] == agg["final"]), pool[0])
+    final_response = agg["final"] or final_chain.get("transcript") or ""
     emit("select", "final", answer=agg["final"])
 
     return {"final_response": final_response,

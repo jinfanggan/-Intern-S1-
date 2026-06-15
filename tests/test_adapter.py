@@ -56,8 +56,11 @@ async def test_solve_problem_returns_contract():
     c = FakeOfficialClient([r"推理过程……所以 \boxed{72}"])
     r = await solve_problem(c, "求解 X", n_chains=3, max_rounds=4)
     assert isinstance(r["final_response"], str) and r["final_response"]
-    assert r"\boxed{72}" in r["final_response"]
-    assert isinstance(r["trace"], list) and r["trace"]
+    # final_response 是纯答案（不含调试日志/轮次标记）
+    assert r["final_response"] == "72"
+    assert "[assistant" not in r["final_response"] and "[sandbox" not in r["final_response"]
+    # 完整推理在 trace 里
+    assert any(t["step"] == "solve:chain_round" for t in r["trace"])
     import json
     json.dumps(r)  # 整体可 JSON 序列化（官方要求）
 
@@ -68,7 +71,7 @@ async def test_solve_problem_voting_picks_majority():
     c = FakeOfficialClient([r"\boxed{42}", r"\boxed{42}", r"\boxed{99}"])
     # FakeClient 按调用顺序返回，3 条链各 1 次调用
     r = await solve_problem(c, "q", n_chains=3, max_rounds=2)
-    assert r"\boxed{42}" in r["final_response"]
+    assert r["final_response"] == "42"
 
 
 @pytest.mark.asyncio
