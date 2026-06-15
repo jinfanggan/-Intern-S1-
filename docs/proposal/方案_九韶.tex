@@ -1,0 +1,359 @@
+\documentclass[11pt, a4paper]{ctexart}
+
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage[table]{xcolor}
+\usepackage{colortbl}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\usepackage[colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, calc, fit, backgrounds}
+
+% ===== 配色：仅黑 + 红 =====
+\definecolor{textblack}{RGB}{20, 20, 20}
+\definecolor{textgray}{RGB}{80, 80, 80}
+\definecolor{accentred}{RGB}{180, 30, 30}
+\definecolor{rulelight}{RGB}{200, 200, 200}
+% TikZ 浅色填充
+\definecolor{boxblue}{RGB}{225, 235, 248}
+\definecolor{boxpink}{RGB}{252, 230, 230}
+\definecolor{boxgreen}{RGB}{225, 240, 225}
+\definecolor{boxyellow}{RGB}{252, 248, 220}
+
+\color{textblack}
+
+% 红色加粗强调
+\newcommand{\hl}[1]{\textcolor{accentred}{\textbf{#1}}}
+
+% 节标题样式：黑色加粗 + 红色编号
+\usepackage{titlesec}
+\titleformat{\section}{\bfseries\large}{\textcolor{accentred}{\thesection}}{0.6em}{}
+\titleformat{\subsection}{\bfseries\normalsize}{\textcolor{accentred}{\thesubsection}}{0.6em}{}
+\titlespacing{\section}{0pt}{1.0em}{0.5em}
+\titlespacing{\subsection}{0pt}{0.8em}{0.4em}
+
+% TikZ 样式
+\tikzset{
+  bluebox/.style={draw=textblack!50, fill=boxblue, rounded corners=2pt, minimum height=0.85cm, align=center, font=\small, inner sep=4pt, text=textblack},
+  pinkbox/.style={draw=textblack!50, fill=boxpink, rounded corners=2pt, minimum height=0.85cm, align=center, font=\small, inner sep=4pt, text=textblack},
+  greenbox/.style={draw=textblack!50, fill=boxgreen, rounded corners=2pt, minimum height=0.85cm, align=center, font=\small, inner sep=4pt, text=textblack},
+  yellowbox/.style={draw=textblack!50, fill=boxyellow, rounded corners=2pt, minimum height=0.85cm, align=center, font=\small, inner sep=4pt, text=textblack},
+  arrow/.style={-{Latex[length=2mm]}, color=textblack!70, thick},
+  redarrow/.style={-{Latex[length=2mm]}, color=accentred!80, thick, dashed}
+}
+
+\setlength{\parskip}{0.35em}
+
+\begin{document}
+
+% ===== 标题页 =====
+\begin{center}
+{\small 题目编号：XH-202627 \quad 「挑战杯」揭榜挂帅擂台赛（学生赛道）\quad 发榜单位：上海人工智能实验室}\\[1.8em]
+{\LARGE\bfseries 九韶}\\[0.6em]
+{\large\bfseries ——基于 Intern-S1 的规划·求解·校验\\[0.2em]多智能体数学推理系统}\\[1.2em]
+{\color{rulelight}\rule{0.85\textwidth}{0.6pt}}\\[1.2em]
+{\small 技术方案 \quad 2026 年 6 月}
+\end{center}
+
+\vspace{0.5em}
+\noindent{\color{accentred}$\blacktriangleright$\ \itshape 一句话概括：用 AIMO 冠军实战验证过的「多路采样 $\times$ 工具集成推理」配方筑牢正确率基本盘，再以两大原创机制攻坚剩余失败模式——「评估器优先」让智能体先构造可执行裁判再对着裁判求解，「歧义分叉」把自洽性从路径层提升到题意解读层。所有设计服务于占分 60\% 的答案正确率主战场。}
+
+\section{赛题解读与国内外现状}
+
+\subsection{赛题本质：底模钉死，比的是智能体工程}
+
+赛题明确「聚焦推理链设计、表达清晰度与教育启发性，而非模型训练或算法优化」，全部队伍的底模统一为 Intern-S1 API——\hl{底模相同，分差只能来自智能体架构对模型解题上限的利用率}。分数结构决定资源分配：
+
+\begin{center}
+\small
+\begin{tabular}{llp{0.52\textwidth}}
+\toprule
+\textbf{评审维度} & \textbf{权重} & \textbf{本方案的应对策略} \\
+\midrule
+答案正确性 & \hl{60\%}（线性计分） & 主战场：SC-TIR 采样求解 + 接地校验（\S4.2--4.3） \\
+展示质量 & 20\% & 可交互 Demo、视频、报告、全程日志留痕（\S6） \\
+推理策略与系统设计 & 10\% & 显式五阶多智能体架构（\S3） \\
+创新性与可扩展性 & 10\% & 两大原创机制：评估器优先 + 歧义分叉求解（\S4.4--4.5） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+两个关键信号：其一，同分时优先比较答案正确性——一切架构最终须回答「提了几个点的正确率」；其二，创新性评分 A 档\hl{明示}「题型路由、过程校验、长程推理控制、外部工具结合」——官方已把创新得分点写成明牌，本方案逐项落实并给出消融证据。
+
+\subsection{模型底座分析：Intern-S1 的能力与约束}
+
+Intern-S1 为 241B 参数 MoE 科学多模态模型（激活 28B，语言主干基于 Qwen3-235B），思考模式默认开启~\cite{interns1}。数学能力：AIME 2025 得分 86.0，与 DeepSeek-R1（87.5）相当，强于 Qwen3-235B（81.5）；但 GPQA 仅 77.3，\hl{研究生级 STEM 题仍有显著失误率}~\cite{interns1}。三项工程约束实测确认后写入系统设计：
+
+\begin{itemize}[itemsep=0.1em]
+  \item \hl{上下文 32K（含输出）}：长思维链 + 多轮工具调用须做上下文裁剪；
+  \item \hl{限流约 30 次/分钟}：多路采样必须配令牌桶限速、缓存与断点续跑；
+  \item \hl{官方未声明原生 JSON mode}：结构化输出依赖客户端 schema 校验 + 修复重试，规避「格式判零」。
+\end{itemize}
+
+\subsection{难度标定：对正确率保持清醒预期}
+
+112 道题覆盖偏微分方程、复分析、拓扑、运筹学等 18 个子领域，难度带大致对应 TheoremQA（GPT-4 仅 52.4\%~\cite{theoremqa}）与 Putnam-AXIOM（GPT-4o 仅 19.4\%，o1-preview 41.9\%~\cite{putnam}）之间。值得警惕的是：Putnam-AXIOM 对题目做变量换名后 GPT-4o 成绩再降 44\%~\cite{putnam}——大模型相当比例的「会做」源于记忆。赛题明示初赛后可能\hl{追加更新更难的题目}，本方案因此坚持「靠真实计算验证、不靠套答案」的泛化路线。
+
+\subsection{国内外方法调研：哪些有效、哪些被证伪}
+
+\textbf{（1）工具集成推理（TIR）——已验证的最大增量。}让模型在推理中穿插「写代码 $\rightarrow$ 真实执行 $\rightarrow$ 回填结果继续推理」：ToRA 在 MATH 上较 GPT-4 纯 CoT 提升 8.5pt~\cite{tora}；PAL 在大数值 GSM-Hard 上 61.2\% 对 CoT 约 20\%~\cite{pal}；MathCoder 消融显示\hl{真实执行代码比让模型自行预测执行结果高 34pt}~\cite{mathcoder}——沙箱必须是真的。
+
+\textbf{（2）采样聚合——零成本的免费午餐。}Self-Consistency 多数投票在 GSM8K/AQuA 上提升 11$\sim$18pt~\cite{sc}。前提是先做\hl{答案等价归一}（$1/2$ 与 $0.5$、$\frac{\sqrt{2}}{2}$ 与 $\sin 45^\circ$ 判同），否则等价答案拆票，投票失效——本赛题答案多为表达式，归一是刚需（Math-Verify~\cite{mathverify}）。
+
+\textbf{（3）实战配方——AIMO 数学奥赛冠军方案。}AIMO Progress Prize 1 冠军采用 \hl{SC-TIR：每题采 $N{=}48$ 条推理链，每条至多 $M{=}4$ 轮代码执行自纠，归一后多数投票}，将同模型成绩从纯 CoT 的 8/50 拉至 29/50，且显著降低方差~\cite{aimo1}。AIMO-2 冠军引入 GenSelect（让模型对候选解生成式比较选优）与自适应 TIR（按题决定是否写代码）~\cite{aimo2}。这是与本赛题形态最接近、被实战验证的配方，本方案以其为主干。
+
+\textbf{（4）被证伪的路线——纯文本自我纠错。}Huang 等证明\hl{无外部反馈时 LLM 的内在自我纠错无效甚至降分}~\cite{selfcorrect}；CRITIC 进一步表明自修正增益几乎全部来自外部工具反馈~\cite{critic}。因此本方案的校验一律「接地」：数值代回、沙箱报错回填、候选比较，\hl{不做无工具的「再想一遍」}。搜索类方法中，ToT~\cite{tot} 对开放解析题 ROI 低，rStar-Math 类 MCTS+PRM 需训练~\cite{rstar}、超出赛题边界，均不采用（仅借鉴其步骤评分思想）。
+
+\textbf{（5）进化程序搜索——面向「可验证目标」题型的新武器。}DeepMind AlphaEvolve 以「LLM 变异程序 + 自动评估器打分 + 种群进化」在矩阵乘法算法、kissing number 等数学问题上取得超越人类已知最优的发现~\cite{alphaevolve}；其开源复刻 OpenEvolve 提供可直接对接 OpenAI 兼容 API 的实现~\cite{openevolve}。该范式恰好覆盖本赛题中\hl{运筹优化、组合构造类「解可机器判优」的题目}，并呼应赛题「促进 AI 在理论发现中的应用」的愿景。
+
+\section{关键技术问题分析}
+
+\begin{center}
+\small
+\begin{tabular}{p{0.24\textwidth}p{0.33\textwidth}p{0.33\textwidth}}
+\toprule
+\textbf{技术问题} & \textbf{难点本质} & \textbf{本方案对策} \\
+\midrule
+\hl{P1 题型异质} & 18 子领域，答案形态横跨数值/表达式/集合/构造，求解与判分策略迥异 & 题型路由：领域 $\times$ 答案形态 $\times$ 难度三维分类，分派求解链与预算（\S4.1） \\
+\addlinespace[0.3em]
+\hl{P2 自纠错幻觉} & 无外部反馈的自我纠错被证伪~\cite{selfcorrect}，纯 prompt 校验是无效投入 & 接地校验：数值代回 + 沙箱反馈 + GenSelect 仲裁（\S4.3） \\
+\addlinespace[0.3em]
+\hl{P3 预算约束} & 限流 30 次/分 $\times$ 多路采样 $\times$ 校验回溯，调用量三重放大 & 动态预算：按难度分配 $N$；令牌桶 + 缓存 + 断点续跑（\S4.1/\S5） \\
+\addlinespace[0.3em]
+\hl{P4 格式判零} & JSON 解析失败即该题零分，API 无原生 JSON mode & schema 客户端校验 + 自动修复重试 + function calling 锁格式（\S4.5） \\
+\addlinespace[0.3em]
+\hl{P5 追加新题} & 初赛后可能加题，过拟合 112 题的方案会暴露 & 不背答案：真实计算验证路线 + 自建泛化自测集（\S5） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{总体技术路线}
+
+系统为「\hl{路由 $\rightarrow$ 求解 $\rightarrow$ 校验 $\rightarrow$ 表达}」四层多智能体流水线：\hl{路由层}为每道题判定类型并定制预算；\hl{求解层}以 $N$ 路并行的「推理 + 真实代码执行」推理链产出候选答案（解题规划内嵌于每条链的首轮输出），构造/优化类题分流至进化求解器；\hl{校验层}对候选答案先等价归一、再机器验证、后投票仲裁，失败时携带原因回溯求解层（至多 2 轮）；\hl{表达层}产出合规 JSON 与启发式讲解。层间传递的数据已在图中标注：
+
+\begin{center}
+\resizebox{0.97\textwidth}{!}{%
+\begin{tikzpicture}[font=\small]
+  \node[bluebox, minimum width=12.2cm, align=center] (input) at (0,0) {题目输入：自然语言 / LaTeX 数学问题};
+  \node[greenbox, minimum width=12.2cm, align=center, below=0.45cm of input] (router)
+    {① 路由层（1 次分类调用）：输出〈子领域，答案形态，难度档〉三元组\\[0.1em]
+     查预算表（\S4.1）定采样路数 $N$ / 工具轮数 $M$ / 温度 / 仲裁方式，并选择求解通道};
+  \node[yellowbox, minimum width=7.2cm, align=center, anchor=north] (solver) at ($(router.south)+(-2.4,-0.85)$)
+    {②a SC-TIR 求解池（解析 / 计算 / 证明类）\\[0.1em]
+     $N$ 路并行推理链：首轮先输出解题计划，再循环\\
+     「写代码 $\to$ 执行 $\to$ 读结果/报错 $\to$ 修正续推」$\leq M$ 轮};
+  \node[pinkbox, minimum width=3.8cm, align=center, anchor=north] (evolve) at ($(router.south)+(5.3,-0.85)$)
+    {②b 评估器优先通道\\自动构造可执行裁判\\（数值裁判/残差/打分器）\\精确求解 $>$ 枚举 $>$ 进化};
+  \node[bluebox, minimum width=4.2cm, align=center, anchor=north] (sandbox) at ($(solver.south)+(-1.5,-0.9)$)
+    {Python 沙箱\\SymPy / SciPy / cvxpy};
+
+  \node[yellowbox, align=center, anchor=north] (subst) at ($(sandbox.south)+(3.4,-0.85)$)
+    {③b 数值代回\\失败簇剔除};
+  \node[yellowbox, align=center, left=0.45cm of subst] (norm)
+    {③a 等价归一\\（Math-Verify）};
+  \node[yellowbox, align=center, right=0.45cm of subst] (decide)
+    {③c 投票决议\\平票交 GenSelect 仲裁};
+  \begin{scope}[on background layer]
+    \node[draw=textblack!40, dashed, rounded corners=3pt, fit=(norm)(subst)(decide), inner sep=6pt,
+          label={[font=\footnotesize\bfseries]above left:③ 聚合与校验层}] (aggbox) {};
+  \end{scope}
+
+  \coordinate (outy) at ($(aggbox.south)+(0,-0.8)$);
+  \node[greenbox, minimum width=12.2cm, align=center, anchor=north] (out) at (input.south |- outy)
+    {④ 表达层：schema 合规 JSON（校验失败自动修复重试）＋ 三段式启发讲解};
+
+  \coordinate (sv) at ($(solver.south)+(1.6,0)$);
+  \coordinate (fb1) at ($(solver.west)+(-0.55,0)$);
+
+  \draw[arrow] (input) -- (router);
+  \draw[arrow] ($(router.south)+(-2.4,0)$) -- node[left, font=\footnotesize]{常规题} (solver.north);
+  \draw[arrow] ($(router.south)+(5.3,0)$) -- node[right, font=\footnotesize]{可机器判优题} (evolve.north);
+  \draw[arrow, <->] ($(solver.south)+(-1.5,0)$) -- node[right, font=\footnotesize]{真实执行} (sandbox.north);
+  \draw[arrow] (sv) -- node[right, font=\footnotesize]{$N$ 个候选答案} (sv |- aggbox.north);
+  \draw[arrow] (norm) -- (subst);
+  \draw[arrow] (subst) -- (decide);
+  \draw[arrow] (evolve.south) -- node[right, font=\footnotesize]{已验证解} (evolve.south |- out.north);
+  \draw[arrow] (aggbox.south) -- node[right, font=\footnotesize]{最终答案 + 已验证推理链} (aggbox.south |- out.north);
+  \draw[redarrow] (aggbox.west) -- (aggbox.west -| fb1) -- node[left, align=center, font=\footnotesize\itshape, text=accentred]{校验失败\\回溯 $\leq$2 轮} (fb1) -- (solver.west);
+\end{tikzpicture}%
+}
+\end{center}
+
+\subsection{单题数据流走查（以一道中档常微分方程题为例）}
+
+\begin{enumerate}[itemsep=0.15em]
+  \item \textbf{路由（1 次调用）}：判定〈微分方程，表达式型答案，中档〉，查预算表得 $N{=}16$、$M{\leq}4$、温度 0.7、仲裁方式「投票 + 平票 GenSelect」。若判定为构造/优化类（如「求最小的 $n$ 使得……」），整题改走进化求解器（\S4.4），后续步骤 2--5 不再执行。
+  \item \textbf{求解（16 路并行）}：每路推理链首轮先输出解题计划（用什么方法、分几步、哪步需要计算）；随后进入工具循环——写 SymPy 代码求解 $\rightarrow$ 沙箱真实执行 $\rightarrow$ 若报错则 traceback 回填修正（唯一被证实有效的自纠形态，\S1.4(4)）$\rightarrow$ 续推；至多 4 轮后每路给出一个候选答案与完整推理链。
+  \item \textbf{等价归一}：Math-Verify 将 16 个候选化为规范形式，等价变形（同一通解的不同写法）合并为答案簇——假设得到 3 簇，票数 11/4/1。
+  \item \textbf{数值代回}：每簇取代表解，抽数值点代回原方程与初值条件机械验证，不满足者整簇剔除——假设 4 票簇被剔除。
+  \item \textbf{投票决议}：幸存簇中 11 票多数胜出；若平票或全部簇被剔除，交 GenSelect 仲裁智能体比较候选推理链选优；仍无合格解时，将失败原因（如「候选解均不满足初值条件」）拼入 prompt 回到第 2 步重解，\hl{至多回溯 2 轮}，超限则输出当前最优解并在日志中标注低置信。
+  \item \textbf{表达}：最终答案与已验证推理链交输出智能体，生成 schema 合规 JSON（本地校验失败自动修复重试）与三段式启发讲解（动机 $\rightarrow$ 关键洞察 $\rightarrow$ 常见误区）。
+\end{enumerate}
+
+\subsection{工程底座}
+
+基于官方基线 lagent~\cite{lagent} 的 OpenAI 兼容后端与 PythonInterpreter 组件，编排逻辑自研——既继承官方基线，又保证比赛逻辑（动态预算、JSON 鲁棒、限流调度）完全可控。
+
+\section{关键模块设计}
+
+各模块的输入/输出接口与实现载体汇总如下，随后逐一展开：
+
+\begin{center}
+\small
+\begin{tabular}{lp{0.2\textwidth}p{0.24\textwidth}p{0.32\textwidth}}
+\toprule
+\textbf{模块} & \textbf{输入} & \textbf{输出} & \textbf{实现载体} \\
+\midrule
+① 路由 & 题面 & 〈领域，形态，难度〉+ 预算 & Intern-S1 单次调用，function calling 锁分类 schema \\
+\addlinespace[0.2em]
+②a SC-TIR & 题面 + 预算 $(N,M,T)$ & $N$ 份〈候选答案，推理链〉 & asyncio 并行 + 子进程沙箱 + 令牌桶限流 \\
+\addlinespace[0.2em]
+②b 进化求解 & 题面 + 自动生成的评估器 & 已验证最优解 + 得分 & OpenEvolve 对接书生 API \\
+\addlinespace[0.2em]
+③ 聚合校验 & 候选答案集 & 最终答案 + 置信度 & Math-Verify/SymPy + 沙箱代回 + 仲裁调用 \\
+\addlinespace[0.2em]
+④ 表达 & 最终答案 + 已验证推理链 & 合规 JSON + 讲解文本 & pydantic 校验 + 修复重试循环 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{题型路由与动态预算分配}
+
+\textbf{功能拆解}：(a) 子领域分类（18 类）；(b) 答案形态分类（数值/表达式/集合区间/证明/构造优化，共 5 类，决定后续校验模板的选择）；(c) 难度分档（易/中/难）；(d) 查表定预算；(e) 低置信兜底。
+
+\textbf{实现要点}：单次调用、温度 0，以 function calling 强制输出〈领域，答案形态，难度，是否需代码〉四字段；提示词内嵌 18 子领域定义及各 1 个分类示例；模型自报分类置信度低于阈值时一律按「中档」处理（宁可多花预算，不可漏判难题）；路由结果落盘缓存，全量重跑不重复分类。难题预算对齐 AIMO-1 实测饱和点（$N{=}48$ 后增益趋零~\cite{aimo1}）：
+
+\begin{center}
+\small
+\begin{tabular}{lllll}
+\toprule
+\textbf{难度档} & \textbf{采样 $N$} & \textbf{TIR 轮数 $M$} & \textbf{温度} & \textbf{仲裁方式} \\
+\midrule
+简单 & 4 & $\leq$2 & 0.3 & 多数投票 \\
+中档 & 16 & $\leq$4 & 0.7 & 投票 + 平票 GenSelect \\
+困难 & $\leq$48 & $\leq$4 & 0.7$\sim$1.0 & GenSelect \\
+可验证构造/优化 & 进化搜索（\S4.4） & --- & --- & 评估器目标函数判优 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{SC-TIR 求解引擎（正确率的主引擎）}
+
+\textbf{功能拆解}：(a) 分领域提示模板库；(b) 单链推理状态机；(c) Python 沙箱；(d) 上下文管控；(e) 并行调度与缓存。每条推理链为「思考 $\rightarrow$ 写代码 $\rightarrow$ 沙箱执行 $\rightarrow$ 观察结果/traceback $\rightarrow$ 继续」的多轮循环：符号积分、级数、留数、特征值交给 SymPy，数值验证交给 SciPy/NumPy，线性/整数规划交给 cvxpy/PuLP——把模型最易出错的机械计算外包给确定性工具（MathCoder 消融 +34pt 的来源~\cite{mathcoder}）。
+
+\textbf{实现要点}：
+
+\begin{itemize}[itemsep=0.1em]
+  \item \textbf{提示模板库}：system prompt = 领域专家角色 + 工具协议（\texttt{```python} 代码块约定）+ 答案格式约定（终答置于 \texttt{\textbackslash boxed\{\}}）；按 18 子领域维护模板并注入领域指引（如复分析题提示优先考虑留数定理与围道选取）；
+  \item \textbf{单链状态机}：「计划 $\to$（代码 $\to$ 执行 $\to$ 观察）$^{*}$ $\to$ 终答」；正则解析输出中的代码块，已给出 \texttt{boxed} 终答且无新代码块即终止；
+  \item \textbf{沙箱}：独立子进程执行，超时 30s、内存上限 2GB、import 白名单（sympy/numpy/scipy/cvxpy 等）、禁网络与文件写；stdout/traceback 截断至 2000 字符回填；
+  \item \hl{自适应 TIR}：拓扑、抽象代数等纯推理题不强制写代码（AIMO-2 经验：部分题代码无益~\cite{aimo2}），由路由 \texttt{need\_code} 字段控制开关，省下的预算让给采样；
+  \item \hl{上下文管控}：针对 32K 限制，每轮仅保留题面、解题计划与最近一轮代码及输出，更早轮次压缩为单句摘要；
+  \item \textbf{并行调度}：asyncio 并发 + 令牌桶（默认 30 次/分，按实测调整）；所有调用以〈题号，链号，轮次，prompt 哈希〉为键落盘缓存，支持断点续跑；
+  \item \hl{提前终止}：前 8 路完成后若最大答案簇票数 $\geq 6$ 且通过数值代回，停采剩余路数——按 AIMO-1 的票数分布估计可节省约三成调用量。
+\end{itemize}
+
+\subsection{接地校验与仲裁（第二增量，对应评分 A 档「过程校验」）}
+
+依据 \S1.4(4) 的证据，校验全部绑定外部反馈，按成本递增分三层：
+
+\begin{enumerate}[itemsep=0.1em]
+  \item \hl{等价归一}：Math-Verify 抽取 \texttt{boxed} 答案 $\to$ 解析为 SymPy 对象 $\to$ 以 \texttt{simplify}$(a-b){=}0$ / \texttt{equals()} 两两判等聚簇~\cite{mathverify}，杜绝等价拆票；解析失败的候选降级为字符串规范化比较；
+  \item \hl{数值代回}：按路由给出的答案形态选验证模板——方程/ODE 解：随机抽 3$\sim$5 个数值点代入查残差 $<10^{-6}$；优化题：复核可行性与目标值；证明题等不可机械验证形态跳过本层，仅走投票与仲裁。验证代码同走沙箱执行；
+  \item \hl{GenSelect 仲裁与有界回溯}：平票或全部簇被剔除时，仲裁智能体在一次调用内对 2$\sim$16 个候选（题面 + 各候选答案与推理链摘要）做生成式比较选优~\cite{aimo2}；仍失败则将结构化失败原因〈阶段，现象，建议〉拼入重解 prompt，回溯轮采样预算减半，上限 2 轮，防止预算失控。
+\end{enumerate}
+
+\subsection{创新点一：评估器优先范式（Evaluator-First）——先造裁判，再求解}
+
+\textbf{核心思想}：利用数学问题的\hl{验证不对称性}（验证一个解远比求出它容易），在求解之前先派评估器构造智能体\hl{从题面自动合成「可执行裁判」}，把开放求解转化为对着裁判的搜索——裁判是程序而非模型，从根本上绕开「LLM 自我校验不可靠」的缺陷（\S1.4(4)）。按题型自动选择三类裁判：
+
+\begin{itemize}[itemsep=0.1em]
+  \item \hl{数值裁判（numeric oracle）}：积分/ODE/概率题直接数值求解原问题（数值积分、RK 数值解、蒙特卡洛），得到采样点真值，所有候选解析解须与真值吻合——把大量「不可验证」题转化为可验证题；
+  \item \hl{残差/可行性检查器}：方程解代回查残差，优化解复核可行性与目标值（\S4.3 的接地校验即本范式的退化形式）；
+  \item \hl{目标打分器}：开放构造/优化题的连续评分函数。
+\end{itemize}
+
+\textbf{决策机制}：候选解先过裁判——被数值真值否决者直接出局；幸存者投票按\hl{「通过的机器检查数」加权}而非一人一票（证据加权投票）。采样调度按\hl{投票熵自适应}：全票一致即停采，分歧大则追加至预算上限，把有限调用让给真正不确定的题。
+
+\textbf{进化搜索的定位（诚实评估）}：AlphaEvolve 式进化~\cite{alphaevolve,openevolve}仅在「开放构造/优化且裁判可连续打分」的题型上启用（OpenEvolve 直连书生 API，单题预算 $\leq$80 次调用）；考试型优化题\hl{优先精确求解器}（cvxpy/暴力枚举一轮即解），进化是兜底搜索后端而非主力——其在本系统中的真正贡献是「评估器」这一组织原则本身，并保留为决赛「长程推理控制」展示与官方开放题的期权。
+
+\subsection{创新点二：歧义分叉求解（Interpretation Forking）——解读层的自洽性}
+
+\textbf{实证动机（来自本系统调试日志）}：实测中发现典型失败——「divide a set of 8 elements into 5 non-empty ordered subsets」被模型理解为「5 个带标号的桶」（算得满射数 126000，计算无误），而题意是「内部有序的子集」（Lah 数 $L(8,5){=}11760$）。\hl{计算全对、审题错了}；且此类错误\hl{采样再多推理链也无法纠正}——所有链共享同一误读，误差完全相关，路径级 Self-Consistency 的独立性假设失效。
+
+\textbf{机制}：路由层增加歧义检测；标记为歧义风险的题（预计 $<$10\%）先由审题智能体枚举合法解读（$\leq$3 种），采样预算按解读分组分配，各解读组内独立求解投票；仲裁层依据三类线索选解读——答案形态约定（如选项/整数提示）、量纲与数量级合理性、各解读组内部一致性强度。本质是把 Self-Consistency 从路径层提升到\hl{解读层}，以分叉实现误差去相关。
+
+\subsection{结构化输出与启发式讲解}
+
+输出智能体按官方 schema 生成 JSON：以 pydantic 定义官方字段模型做本地强校验，失败时将 \texttt{ValidationError} 信息回填重试（$\leq$3 次，必要时以 function calling 锁定字段结构），仍失败则启用规则兜底（从已验证推理链中正则抽取答案填入必填字段）——多级防线将 P4「格式判零」风险归零。讲解生成采用「三段式启发模板」：为什么想到这个方法（动机）$\rightarrow$ 关键洞察（转折点）$\rightarrow$ 常见误区（教育性），由模型基于已验证的推理链单次调用润色生成——讲解服务主观分，\hl{不占难题求解预算}。
+
+\section{评测工程与量化预期}
+
+\textbf{评测基础设施先行}：本地 runner 支持并发限流（令牌桶 30 次/分）、调用缓存、断点续跑、全量日志落盘（同时满足赛规「日志可复核」要求）；自建近似评分器（Math-Verify + 数值容差）使每次迭代可量化。
+
+\textbf{失败分析驱动迭代}：每周全量评测输出 18 子领域正确率热力图，定向攻坚最弱领域；预留自选难题集做泛化自测，对冲追加新题风险（P5）。
+
+\textbf{预算可行性}：中档配置（$N{=}16$，$M{=}4$）全量一轮约 7200 次调用，在 30 次/分限流下约 4 小时完成，支持每晚全量回归。
+
+\textbf{消融计划与预期}（文献推算，以实测为准；B0 摸底是 6 月的第一个里程碑）：
+
+\begin{center}
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{配置} & \textbf{组成} & \textbf{文献依据} & \textbf{预期增量} \\
+\midrule
+B0 & 裸 CoT 单链（基线摸底） & --- & --- \\
+B1 & B0 + TIR 沙箱 & TIR 系列~\cite{tora,pal,mathcoder} & +6$\sim$12pt \\
+B2 & B1 + SC 投票（$N{=}16$）+ 归一 & SC/AIMO-1~\cite{sc,aimo1} & +8$\sim$15pt \\
+\hl{B3 完整版} & B2 + 评估器优先 + 歧义分叉 & CRITIC~\cite{critic} + 自有失败分析 & \hl{+3$\sim$6pt} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{实施计划与决赛扩展}
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{阶段} & \textbf{时间} & \textbf{内容} \\
+\midrule
+M1 & 6 月 & \hl{6/30 前完成报名}；API 实测（限流/thinking/JSON）；harness 搭建；B0 摸底 \\
+M2 & 7 月 & TIR 沙箱、SC 投票、Math-Verify 归一逐周上线；每周全量回归 + 热力图 \\
+M3 & 8 月上 & 接地校验、GenSelect、进化求解器；攻坚短板领域 \\
+M4 & 8 月下 & 稳定性三连跑验方差；泛化自测；技术报告与 Demo 初版 \\
+M5 & 9 月初 & 代码冻结、最终全量跑、打包提交（报告 + JSON 日志 + 代码） \\
+决赛 & 10--11 月 & 多智能体协作叙事完善；Web Demo（推理树与校验过程可视化、讲解模式）；视频 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+初赛架构本身已是多智能体系统（路由/规划/求解/校验/讲解各司其职），决赛阶段的重心是\hl{可交互展示}：Streamlit Web Demo 实时呈现题型路由决策、$N$ 路推理链的分歧与聚合、校验智能体的代回验证过程，以及进化求解器的种群进化曲线——把系统内部的「推理民主」过程变成评审可见的展品，同时覆盖决赛三个可选挑战方向（长程推理、题型路由 solver、过程校验自主调控）。
+
+\begin{thebibliography}{99}\small
+\bibitem{interns1} Bai L., Cai L., et al. Intern-S1: A Scientific Multimodal Foundation Model. arXiv:2508.15763, 2025.
+\bibitem{tora} Gou Z., Shao Z., Gong Y., et al. ToRA: A tool-integrated reasoning agent for mathematical problem solving. \textit{ICLR}, 2024.
+\bibitem{pal} Gao L., Madaan A., Zhou S., et al. PAL: Program-aided language models. \textit{ICML}, 2023.
+\bibitem{mathcoder} Wang K., Ren H., Zhou A., et al. MathCoder: Seamless code integration in LLMs for enhanced mathematical reasoning. \textit{ICLR}, 2024.
+\bibitem{sc} Wang X., Wei J., Schuurmans D., et al. Self-consistency improves chain of thought reasoning in language models. \textit{ICLR}, 2023.
+\bibitem{aimo1} Beeching E., Huang S. C., Jiang A. Q., et al. How NuminaMath won the 1st AIMO Progress Prize. Hugging Face Blog, 2024.
+\bibitem{aimo2} Moshkov I., Hanley D., Sorokin I., et al. AIMO-2 winning solution: Building state-of-the-art mathematical reasoning models with OpenMathReasoning dataset. arXiv:2504.16891, 2025.
+\bibitem{selfcorrect} Huang J., Chen X., Mishra S., et al. Large language models cannot self-correct reasoning yet. \textit{ICLR}, 2024.
+\bibitem{critic} Gou Z., Shao Z., Gong Y., et al. CRITIC: Large language models can self-correct with tool-interactive critiquing. \textit{ICLR}, 2024.
+\bibitem{tot} Yao S., Yu D., Zhao J., et al. Tree of Thoughts: Deliberate problem solving with large language models. \textit{NeurIPS}, 2023.
+\bibitem{rstar} Guan X., Zhang L. L., Liu Y., et al. rStar-Math: Small LLMs can master math reasoning with self-evolved deep thinking. arXiv:2501.04519, 2025.
+\bibitem{alphaevolve} Novikov A., V\~{u} N., Eisenberger M., et al. AlphaEvolve: A coding agent for scientific and algorithmic discovery. arXiv:2506.13131, 2025.
+\bibitem{openevolve} Sharma A. OpenEvolve: An open-source evolutionary coding agent. \url{https://github.com/codelion/openevolve}, 2025.
+\bibitem{mathverify} Hugging Face. Math-Verify: A robust mathematical expression evaluation system. \url{https://github.com/huggingface/Math-Verify}, 2025.
+\bibitem{theoremqa} Chen W., Yin M., Ku M., et al. TheoremQA: A theorem-driven question answering dataset. \textit{EMNLP}, 2023.
+\bibitem{putnam} Gulati A., Miranda B., Chen E., et al. Putnam-AXIOM: A functional and static benchmark for measuring higher level mathematical reasoning. arXiv:2508.08292, 2025.
+\bibitem{lagent} InternLM Team. Lagent: A lightweight framework for building LLM-based agents. \url{https://github.com/InternLM/lagent}, 2024.
+\end{thebibliography}
+
+\end{document}
