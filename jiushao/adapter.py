@@ -78,6 +78,24 @@ def oracle_filter(ok_chains: list[dict], oracle: dict) -> list[dict] | None:
     return [c for c, s in scored if s > 0]
 
 
+async def solve_with_forking_adapter(client, problem: str, *, n_chains: int = 3,
+                                     max_rounds: int = 4, temperature: float = 0.6) -> dict:
+    """创新点二入口：歧义分叉求解，包装成官方 {final_response, trace} 契约。"""
+    from .forking import solve_with_forking
+    llm = OfficialClientLLM(client, default_temperature=temperature)
+    events: list[dict] = []
+
+    def emit(stage, etype, **data):
+        events.append({"stage": stage, "type": etype, **data})
+
+    emit("input", "problem", problem=problem)
+    r = await solve_with_forking(llm, problem, n_chains=n_chains,
+                                 max_rounds=max_rounds, temperature=temperature,
+                                 emit=emit)
+    final = r.get("transcript") or (r.get("answer") or "")
+    return {"final_response": final, "trace": _events_to_trace(events)}
+
+
 async def solve_problem(client, problem: str, *, n_chains: int = 3,
                         max_rounds: int = 4, temperature: float = 0.6,
                         use_oracle: bool = True) -> dict:
