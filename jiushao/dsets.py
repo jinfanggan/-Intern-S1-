@@ -135,3 +135,47 @@ def load(name: str, limit: int | None = None) -> list[Problem]:
     if name not in LOADERS:
         raise ValueError(f"未知数据集 {name}，可选: {list(LOADERS)}")
     return LOADERS[name](limit)
+
+
+# ---------------------------------------------------------------------------
+# 答案形态大类归一（按"哪个机制能发力"分层，而非数学分支）
+#   numeric  数值/可计算   → TIR(SciPy) + 数值裁判主战场
+#   symbolic 符号/精确值   → TIR(SymPy)
+#   proof    判定/证明/不变量 → 推理 + 投票（软肋）
+#   decision 布尔/选择     → 投票为主
+#   other    未归类
+# 各数据集 subject 标注混乱（见各 loader），故 subject 关键词优先、answer_type 兜底。
+# ---------------------------------------------------------------------------
+DOMAIN_LABELS = {
+    "numeric": "数值/可计算", "symbolic": "符号/精确值",
+    "proof": "判定/证明", "decision": "布尔/选择", "other": "其他",
+}
+
+_KW_NUMERIC = ("integral", "积分", "ode", "pde", "微分方程", "_numeric",
+               "probab", "概率", "statistic", "统计", "precalc", "测度")
+_KW_PROOF = ("topolog", "拓扑", "real analysis", "实分析", "functional",
+             "泛函", "geometr", "几何")
+_KW_SYMBOLIC = ("algebra", "代数", "number", "数论", "complex", "复分析",
+                "linear", "线性", "polynomial", "symbolic", "series",
+                "序列", "combinat", "组合")
+
+
+def classify_domain(p: "Problem") -> str:
+    """把 Problem 归一到答案形态大类（见 DOMAIN_LABELS）。"""
+    subj = (p.subject or "").lower()
+    at = str(p.meta.get("answer_type") or p.meta.get("type") or "").lower()
+    # 1) subject 关键词（领域明确时优先）
+    if any(k in subj for k in _KW_NUMERIC):
+        return "numeric"
+    if any(k in subj for k in _KW_PROOF):
+        return "proof"
+    if any(k in subj for k in _KW_SYMBOLIC):
+        return "symbolic"
+    # 2) answer_type 兜底（subject 不明，如 TheoremQA 统一标 theoremqa）
+    if at in ("float", "list of float", "numerical"):
+        return "numeric"
+    if at in ("bool", "option"):
+        return "decision"
+    if at in ("integer", "list of integer", "symbolic", "math_expression", "list"):
+        return "symbolic"
+    return "other"

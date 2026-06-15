@@ -54,13 +54,22 @@ def report(logger: RunLogger, llm: LLM | None = None) -> dict:
         return {}
     total = len(results)
     correct = sum(r["correct"] for r in results)
+    from .dsets import DOMAIN_LABELS
+    by_domain = defaultdict(lambda: [0, 0])
     by_subject = defaultdict(lambda: [0, 0])
     for r in results:
+        d = r.get("domain") or "other"
+        by_domain[d][0] += r["correct"]
+        by_domain[d][1] += 1
         s = r.get("subject") or "unknown"
         by_subject[s][0] += r["correct"]
         by_subject[s][1] += 1
     print(f"\n===== 报告：{logger.root.name} =====")
     print(f"总体: {correct}/{total} = {correct/total:.1%}")
+    print("— 按答案形态大类（哪个机制该发力）—")
+    for d, (c, n) in sorted(by_domain.items(), key=lambda kv: kv[1][0]/kv[1][1]):
+        print(f"  {DOMAIN_LABELS.get(d, d):<12} {c}/{n} = {c/n:.1%}")
+    print("— 按原始 subject 细分 —")
     for s, (c, n) in sorted(by_subject.items(), key=lambda kv: kv[1][0]/kv[1][1]):
         print(f"  {s:<28} {c}/{n} = {c/n:.1%}")
     if llm:
@@ -69,4 +78,5 @@ def report(logger: RunLogger, llm: LLM | None = None) -> dict:
               f"{u['in']/1000:.1f}k in / {u['out']/1000:.1f}k out, "
               f"约 ${llm.cost_usd():.4f}")
     return {"accuracy": correct / total, "total": total,
+            "by_domain": {k: (v[0], v[1]) for k, v in by_domain.items()},
             "by_subject": {k: (v[0], v[1]) for k, v in by_subject.items()}}

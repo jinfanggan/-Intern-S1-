@@ -64,3 +64,35 @@ class TestDatasets:
     def test_unknown_dataset_raises(self):
         with pytest.raises(ValueError):
             dsets.load("不存在")
+
+
+class TestDomainClassify:
+    """答案形态大类归一。"""
+
+    def _p(self, subject="", **meta):
+        from jiushao.dsets import Problem
+        return Problem(id="x", question="q", answer="a", subject=subject, meta=meta)
+
+    def test_subject_keyword_priority(self):
+        from jiushao.dsets import classify_domain
+        assert classify_domain(self._p("integral")) == "numeric"
+        assert classify_domain(self._p("拓扑")) == "proof"
+        assert classify_domain(self._p("抽象代数")) == "symbolic"
+        assert classify_domain(self._p("复分析")) == "symbolic"
+
+    def test_answer_type_fallback(self):
+        from jiushao.dsets import classify_domain
+        # subject 不明（theoremqa）→ 走 answer_type
+        assert classify_domain(self._p("theoremqa", answer_type="float")) == "numeric"
+        assert classify_domain(self._p("theoremqa", answer_type="bool")) == "decision"
+        assert classify_domain(self._p("theoremqa", answer_type="integer")) == "symbolic"
+
+    def test_unknown_is_other(self):
+        from jiushao.dsets import classify_domain
+        assert classify_domain(self._p("", )) == "other"
+
+    def test_all_loaders_classify_without_error(self):
+        from jiushao import dsets
+        for name in dsets.LOADERS:
+            for p in dsets.load(name, limit=5):
+                assert dsets.classify_domain(p) in dsets.DOMAIN_LABELS

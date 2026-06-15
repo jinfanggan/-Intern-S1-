@@ -8,7 +8,7 @@ import time
 
 from .aggregate import cluster_and_vote
 from .config import PROFILES
-from .dsets import Problem
+from .dsets import Problem, classify_domain
 from .judge import judge_with_meta
 from .llm import LLM
 from . import oracle_loop  # noqa: F401  触发 oracle-tir 注册
@@ -52,7 +52,8 @@ async def run_problem(llm: LLM, problem: Problem, profile_name: str, emit) -> di
          elapsed=round(time.time() - t0, 1))
 
     return {
-        "id": problem.id, "subject": problem.subject, "profile": profile_name,
+        "id": problem.id, "subject": problem.subject,
+        "domain": classify_domain(problem), "profile": profile_name,
         "pred": final, "gold": problem.answer, "correct": correct,
         "n_chains_ok": len(ok_chains), "n_chains": n_chains,
         "elapsed": round(time.time() - t0, 1),
