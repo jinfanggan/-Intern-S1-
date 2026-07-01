@@ -51,6 +51,10 @@ result = agent.solve(problem, metadata)          # → {"final_response": str, "
 
 提交时 fork 官方 baseline（`github.com/InternLM/Challenge-Cup-2026`），用 `submission/user_agent.py` + `jiushao/` 包替换其入口。适配层 `jiushao/adapter.py` 把官方同步 client 包成引擎所需接口，完整复用求解逻辑。
 
+> **完整提交步骤、自检清单、判分规则、常见异常见 [提交指南](docs/项目维护/提交指南.md)。**
+> 关键约束：初赛按答案正确率客观评分（trace 不直接计分，仅同分/决赛参考）；
+> 提交每天≤2 次、每周≤10 次，务必本地充分验证再提交。
+
 ---
 
 ## 架构（四层流水线）
@@ -132,6 +136,7 @@ jiushao/
 | [docs/项目维护/项目结构文档_v0.1.md](docs/项目维护/项目结构文档_v0.1.md) | 架构 / 模块 / 关键函数 / 流程 / 运维 |
 | [docs/项目维护/数据与资源清单.md](docs/项目维护/数据与资源清单.md) | 数据在哪 / 怎么获取 / 缓存结构 |
 | [docs/项目维护/开发进展记录.md](docs/项目维护/开发进展记录.md) | 各轮进展 + 实验数据 + 待办 |
+| [docs/项目维护/提交指南.md](docs/项目维护/提交指南.md) | **如何提交官方评测**（步骤/自检/判分/异常） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 协作规范（分支 / 提交 / 密钥纪律） |
 | [OFFICIAL_FINDINGS.md](OFFICIAL_FINDINGS.md) | 官方文档核实记录 |
 

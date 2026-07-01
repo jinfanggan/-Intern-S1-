@@ -69,6 +69,19 @@ MODEL_PROFILES = {
         "price_in": 0.0, "price_out": 0.0,
         "rpm": 28,  # 官方约 30 次/分，留余量
     },
+    # 官方推荐主力模型（数学能力最强，已实测可用）。thinking 默认开，
+    # 单次约 5000 token / 53s（实测），max_tokens 须给足否则思考链被截断。
+    "intern-s2-preview": {
+        "base_url": "https://chat.intern-ai.org.cn/api/v1",
+        "api_key_env": "INTERN_API_KEY",
+        "max_tokens_param": "max_tokens",
+        "supports_temperature": True,
+        "default_temperature": 0.7,
+        "extra": {"top_p": 1.0},
+        "supports_n": True,
+        "price_in": 0.0, "price_out": 0.0,
+        "rpm": 90,  # 申请 RPM 100，留余量；实际吞吐受单次 53s 墙钟限制
+    },
 }
 
 DEFAULT_MAX_TOKENS = 16000
